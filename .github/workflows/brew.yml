@@ -61,7 +61,7 @@ jobs:
           brew uninstall --ignore-dependencies cmake || true
 
           # 构建 bottle
-          brew uninstall --formula "$FORMULA"
+          brew uninstall --formula "$FORMULA" || true
           brew install --build-bottle --formula "./${RBFILE}"
 
           echo "########## Installed bottles:"
