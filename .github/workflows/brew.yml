@@ -9,7 +9,7 @@ on:
       formula:
         description: "Homebrew formula name (e.g. jq)"
         required: true
-        default: "mupdf"
+        default: "jq"
 
 permissions:
   contents: write
