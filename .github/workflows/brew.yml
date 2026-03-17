@@ -62,7 +62,7 @@ jobs:
 
           # 构建 bottle
           brew uninstall --formula "$FORMULA"
-          brew install --build-bottle --formula --build-from-source "./${RBFILE}"
+          brew install --build-bottle --formula "./${RBFILE}"
 
           echo "########## Installed bottles:"
           brew bottle "${FORMULA}" --no-rebuild --force-core-tap
