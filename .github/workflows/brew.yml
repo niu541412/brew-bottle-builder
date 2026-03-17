@@ -1,0 +1,122 @@
+name: Build Homebrew Bottle (parametrized)
+
+on:
+  push:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      formula:
+        description: "Homebrew formula name (e.g. jq)"
+        required: true
+        default: "jq"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-bottle:
+    runs-on: macos-15-intel
+    env:
+      HOMEBREW_DEVELOPER: "1"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            ~/Library/Caches/Homebrew/downloads
+          key: brew-cache-${{ runner.os }}-${{ hashFiles('patches/*.patch') }}
+          restore-keys: |
+            brew-cache-${{ runner.os }}-
+
+      - name: Prepare and build bottle
+        run: |
+          set -euxo pipefail
+
+          FORMULA="${{ github.event.inputs.formula || 'jq' }}"
+          RBFILE="${FORMULA}.rb"
+
+          WORKDIR="$GITHUB_WORKSPACE/build"
+          ARTDIR="$GITHUB_WORKSPACE/artifacts"
+          mkdir -p "$WORKDIR" "$ARTDIR"
+          cd "$WORKDIR"
+
+          echo "Building formula: $FORMULA"
+
+          # 清理可能冲突组件（可选）
+          curl -kOs https://gist.githubusercontent.com/nicerobot/1515915/raw/uninstall-mono.sh
+          chmod +x ./uninstall-mono.sh
+          ./uninstall-mono.sh || true
+
+          # 下载 Homebrew core formula
+          brew fetch --formula "$FORMULA"
+          brew cat "$FORMULA" > "$RBFILE"
+
+          # 避免已知依赖冲突
+          brew uninstall --ignore-dependencies cmake || true
+
+          # 构建 bottle
+          brew install --build-bottle --formula "./${RBFILE}"
+
+          echo "########## Installed bottles:"
+          brew bottle "${FORMULA}" --no-rebuild --force-core-tap
+
+          mv ./*.tar.gz "$ARTDIR/"
+
+          echo "FORMULA=$FORMULA" >> $GITHUB_ENV
+
+          # 收集 Homebrew 编译日志
+          LOG_SRC="$HOME/Library/Logs/Homebrew/${FORMULA}"
+          LOG_TAR="$ARTDIR/${FORMULA}-logs.tar.gz"
+
+          if [ -d "$LOG_SRC" ]; then
+            echo "Packing logs..."
+            tar -czf "$LOG_TAR" -C "$HOME/Library/Logs/Homebrew" "${FORMULA}"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: artifacts/*
+
+      - name: Delete ALL old assets from nightly
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+
+          TAG=nightly
+
+          echo "Deleting ALL assets from release: $TAG"
+
+          # 如果 release 不存在，直接跳过
+          gh release view "$TAG" >/dev/null 2>&1 || exit 0
+
+          # 列出所有 asset 并删除
+          assets=$(gh release view "$TAG" --json assets -q '.assets[].name' 2>/dev/null || true)
+
+          if [ -z "$assets" ]; then
+            echo "No assets to delete"
+            exit 0
+          fi
+
+          echo "$assets" | while read asset; do
+            echo "Deleting $asset"
+            gh release delete-asset "$TAG" "$asset" -y
+          done
+
+      - name: Create/Update nightly release
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly bottle
+          files: artifacts/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
