@@ -60,6 +60,9 @@ jobs:
           # 避免已知依赖冲突
           brew uninstall --ignore-dependencies cmake || true
 
+          # 更新
+          brew upgrade
+
           # 构建 bottle
           brew uninstall --formula "$FORMULA" || true
           brew install --build-bottle --formula "./${RBFILE}"
