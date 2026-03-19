@@ -61,6 +61,7 @@ jobs:
           brew uninstall --ignore-dependencies cmake || true
 
           # 更新
+          brew update
           brew upgrade
 
           # 构建 bottle
