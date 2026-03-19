@@ -57,18 +57,17 @@ jobs:
           brew fetch --formula "$FORMULA"
           brew cat "$FORMULA" > "$RBFILE"
 
-          # 避免已知依赖冲突
-          brew uninstall --ignore-dependencies cmake || true
-
           # 更新
           brew update
           brew upgrade
+          
+          # 避免已知依赖冲突
+          brew uninstall --ignore-dependencies cmake || true
 
           # 构建 bottle
           brew uninstall --formula "$FORMULA" || true
           brew install --build-bottle --formula "./${RBFILE}"
 
-          echo "########## Installed bottles:"
           brew bottle "${FORMULA}" --no-rebuild --force-core-tap
 
           mv ./*.tar.gz "$ARTDIR/"
